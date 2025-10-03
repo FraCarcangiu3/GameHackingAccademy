@@ -21,6 +21,7 @@ DWORD* player_base;
 DWORD* game_base;
 DWORD* gold;
 DWORD ret_address = 0x00CCAF90; // indirizzo di ritorno esatto (32-bit)
+// test
 
 // Handle dell'evento creato dall'inniettore (aperto con OpenEvent)
 static HANDLE hInjectorEvent = NULL;
