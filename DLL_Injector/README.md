@@ -160,5 +160,57 @@ DLL_Injector.exe "C:\\Users\\tuoUtente\\source\\repos\\Wesnoth_CodeCaveDLL\\Debu
 ## Nota legale
 Codice per scopi educativi. Usalo responsabilmente e solo dove consentito.
 
+## Approfondimenti didattici
+
+### Blocco 8 — Attesa del processo target (spiegazione completa)
+
+Obiettivo: trovare il PID (Process ID) del processo bersaglio, ad esempio `wesnoth.exe`. Finché non è avviato, aspettiamo e riproviamo fino a un limite di tempo.
+
+Passi, uno per uno:
+- Inizializziamo variabili di controllo:
+  - `pid = 0`: finché resta 0, il processo non è stato trovato.
+  - `attesaMaxMs = 30000`: aspettiamo al massimo 30 secondi.
+  - `atteso = 0`: tempo già atteso.
+- Ciclo di polling: finché `pid == 0` e `atteso <= attesaMaxMs`:
+  - `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)`: crea uno "snapshot" (fotografia) dei processi correnti.
+  - Prepariamo `PROCESSENTRY32W pe = {0}` e impostiamo `pe.dwSize = sizeof(pe)` (obbligatorio per le API Win32).
+  - `Process32FirstW(snap, &pe)` per leggere il primo processo; poi `Process32NextW` in un ciclo per scorrere tutti.
+  - Confrontiamo `_wcsicmp(pe.szExeFile, target)` per verificare se il nome dell'eseguibile coincide (case-insensitive, wide/Unicode).
+  - Se coincide, salviamo `pe.th32ProcessID` in `pid`.
+  - `CloseHandle(snap)` per chiudere sempre l'handle dello snapshot.
+  - Se `pid` è ancora 0: `Sleep(500)` e sommiamo 500 a `atteso`.
+- Se dopo il ciclo `pid` è 0, stampiamo un messaggio chiaro e usciamo: il processo non è stato trovato entro il tempo limite.
+
+Perché polling e non "eventi"? La ToolHelp API fornisce una vista statica; non esiste una callback "avvisami quando appare X", quindi si controlla periodicamente.
+
+Errori comuni:
+- Dimenticare `pe.dwSize = sizeof(pe)`: la funzione fallisce.
+- Non chiudere lo snapshot con `CloseHandle`: perdite di handle.
+- Nome processo errato o diverso (versioni Steam, localizzazioni): `_wcsicmp` non troverà match.
+- Timeout troppo breve: aumenta `attesaMaxMs` se serve.
+
+### Blocco 12 — Risoluzione di LoadLibraryA (spiegazione completa)
+
+Obiettivo: ottenere l'indirizzo della funzione `LoadLibraryA` in `kernel32.dll` per usarla come entry-point del thread remoto. Il thread nel processo target chiamerà quella funzione per caricare la DLL.
+
+Passi, uno per uno:
+- `HMODULE k32 = GetModuleHandleA("kernel32.dll");`
+  - Restituisce l'handle (base address) del modulo `kernel32.dll` caricato nel nostro processo.
+- `FARPROC pLoadLibA = GetProcAddress(k32, "LoadLibraryA");`
+  - Cerca il simbolo esportato "LoadLibraryA" dentro `kernel32.dll` e restituisce un puntatore a funzione generico.
+
+Perché questo indirizzo è valido anche nel target?
+- Le DLL di sistema (come `kernel32.dll`) sono mappate in modo coerente tra processi. Con questa tecnica didattica è sufficiente usare l'indirizzo risolto nel nostro processo: il thread remoto nel target potrà eseguire la stessa funzione.
+
+Come lo usiamo con `CreateRemoteThread`:
+- Castiamo `pLoadLibA` a `LPTHREAD_START_ROUTINE` perché l'API richiede un puntatore a funzione con firma `DWORD WINAPI Fn(LPVOID)`.
+- Passiamo come parametro l'indirizzo, NEL TARGET, della stringa col percorso assoluto della DLL (ottenuto da `VirtualAllocEx` + `WriteProcessMemory`).
+- Il thread remoto esegue quindi `LoadLibraryA(parametro)`, il loader carica la DLL e l'`HMODULE` restituito diventa l'exit code del thread (che leggiamo con `GetExitCodeThread`).
+
+Cause tipiche di fallimento:
+- `GetModuleHandleA` o `GetProcAddress` falliscono (raro): abortiamo e stampiamo l'errore.
+- La stringa passata a `LoadLibraryA` non è valida nel target (indirizzo errato o memoria liberata).
+- Il percorso contiene caratteri non ASCII: meglio usare `LoadLibraryW` e scrivere una wide-string nel target.
+
 
 
