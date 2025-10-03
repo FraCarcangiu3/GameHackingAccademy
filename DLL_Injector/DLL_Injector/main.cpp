@@ -25,7 +25,8 @@ La spiegazione completa di come funziona questo codice è disponibile su https://
 
 
 // Il percorso completo della DLL da iniettare.
-const char* dll_path = "C:\\Users\\francesco\\source\\repos\\InternalMemoryHack\\Debug\\InternalMemoryHack.dll";
+//const char* dll_path = "C:\\Users\\francesco\\source\\repos\\InternalMemoryHack\\Debug\\InternalMemoryHack.dll";
+const char* dll_path = "C:\\Users\\francesco\\source\\repos\\InternalMemoryHack\\Wesnoth_CodeCaveDLL\\Debug\\Wesnoth_CodeCaveDLL.dll";
 
 int main(int argc, char** argv) {
 	HANDLE snapshot = 0;
