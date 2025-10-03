@@ -7,19 +7,20 @@
 	salva poi i registri, imposta l'oro a 888, e poi ripristina le istruzioni originali modificate
 	prima di ritornare al codice chiamante originale.
 
-	Questo deve essere iniettato nel processo di Wesnoth per funzionare. Un modo per farlo è usare un injector di DLL.
-	Un altro modo è abilitare AppInit_DLLs nel registro.
+	Questo deve essere iniettato nel processo di Wesnoth per funzionare. Un modo per farlo ï¿½ usare un injector di DLL.
+	Un altro modo ï¿½ abilitare AppInit_DLLs nel registro.
 
 	Gli offset e la spiegazione della codecave sono trattati in https://gamehacking.academy/lesson/11 e https://gamehacking.academy/lesson/17
 */
 
 #include <Windows.h>
+#pragma comment(lib, "user32.lib")
 
 
 DWORD* player_base;
 DWORD* game_base;
 DWORD* gold;
-DWORD ret_address = 0xCCAF90;
+DWORD ret_address = 0x00CCAF90; // indirizzo di ritorno esatto (32-bit)
 
 // Handle dell'evento creato dall'inniettore (aperto con OpenEvent)
 static HANDLE hInjectorEvent = NULL;
@@ -48,9 +49,11 @@ __declspec(naked) void codecave() {
 
     // Ripristiniamo le istruzioni originali (esempio) e saltiamo all'indirizzo di ritorno:
     __asm {
+        // riproduci eventuali istruzioni sovrascritte (esempio illustrativo)
         mov eax, dword ptr ds : [ecx]
         lea esi, dword ptr ds : [esi]
-        jmp dword ptr[ret_address]
+        // salta direttamente all'indirizzo di ritorno
+        jmp ret_address
     }
 }
 
@@ -65,22 +68,30 @@ void SignalInjector() {
 DWORD WINAPI InitThread(LPVOID lpv) {
     // Apri l'event endpoint creato dall'inniettore (se esiste)
     hInjectorEvent = OpenEventA(EVENT_MODIFY_STATE, FALSE, "WesnothHookEvent");
-    // NON è un errore se OpenEvent fallisce: l'inniettore potrebbe non averlo creato.
+    // NON ï¿½ un errore se OpenEvent fallisce: l'inniettore potrebbe non averlo creato.
 
     // esegui la patch come prima
     DWORD old_protect;
     unsigned char* hook_location = (unsigned char*)0x00CCAF8A;
 
     if (VirtualProtect((void*)hook_location, 6, PAGE_EXECUTE_READWRITE, &old_protect)) {
-        *hook_location = 0xE9;
+        *hook_location = 0xE9; // JMP rel32
         *(DWORD*)(hook_location + 1) = (DWORD)&codecave - ((DWORD)hook_location + 5);
-        *(hook_location + 5) = 0x90;
+        *(hook_location + 5) = 0x90; // NOP per coprire 1 byte rimanente
 
-        // (facoltativo) ripristina la protezione originale
+        // assicurati che la CPU veda le nuove istruzioni
+        FlushInstructionCache(GetCurrentProcess(), hook_location, 6);
+
+        // ripristina protezioni
         VirtualProtect((void*)hook_location, 6, old_protect, &old_protect);
+
+        // segnale visivo per confermare che la patch Ã¨ stata applicata
+        MessageBoxA(NULL, "Hook applicato: codecave installata.", "Wesnoth_CodeCaveDLL", MB_OK | MB_ICONINFORMATION);
+    } else {
+        MessageBoxA(NULL, "VirtualProtect fallita su hook_location.", "Wesnoth_CodeCaveDLL", MB_OK | MB_ICONERROR);
     }
 
-    // Thread può terminare: non deve rimanere bloccato in DllMain.
+    // Thread puï¿½ terminare: non deve rimanere bloccato in DllMain.
     return 0;
 }
 
@@ -89,7 +100,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 
     if (fdwReason == DLL_PROCESS_ATTACH) {
         // Evitiamo chiamate potenzialmente bloccanti in DllMain:
-        // creiamo subito un thread che farà il resto.
+        // creiamo subito un thread che farï¿½ il resto.
         HANDLE h = CreateThread(NULL, 0, InitThread, NULL, 0, NULL);
         if (h) CloseHandle(h);
     }
