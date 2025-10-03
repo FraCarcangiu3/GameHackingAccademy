@@ -1,144 +1,164 @@
 ## Iniettore di DLL per principianti (Windows)
 
-Questo progetto è una piccola applicazione C++ che “inietta” una DLL dentro un altro programma in esecuzione (il gioco). L’idea pratica: diciamo al gioco di chiamare `LoadLibraryA("percorso\\alla\\tua.dll")` creando un thread dentro di lui. Così la tua DLL viene caricata e può eseguire codice all’interno del processo del gioco.
+Spiegazione didattica e completa di tutto il file `DLL_Injector/DLL_Injector/main.cpp`, suddivisa in blocchi. L’obiettivo è capire ogni riga come un principiante, senza dare nulla per scontato.
 
-Importante: usa questo progetto solo in contesti legali e con software su cui hai i diritti. Le tecniche di injection possono violare ToS o policy anti-cheat.
+Importante: usa questo progetto solo in contesti legali e con software su cui hai i diritti. Le tecniche di injection possono violare ToS o policy anti‑cheat.
 
-### Obiettivo del documento
-- Spiegarti tutto da zero, senza dare nulla per scontato.
-- Guidarti nell’installazione, compilazione, esecuzione e debug.
-- Darti strumenti per capire cosa succede “sotto il cofano”.
+### Blocco 1 — Commento introduttivo (righe 1–22)
+Nel commento iniziale spieghiamo l’idea generale: per caricare una DLL dentro un altro processo (il gioco), scriviamo il percorso della DLL nella memoria del gioco e poi creiamo un thread remoto che chiama `LoadLibraryA` con quel percorso. Così la DLL viene caricata nel processo target.
 
-### Cos’è una DLL e cos’è l’iniezione
-- **DLL**: libreria caricabile a runtime da un processo. Dentro può esserci codice (funzioni) eseguito dal processo che la carica.
-- **Iniezione**: far caricare forzatamente una DLL da un processo che non la caricherebbe da solo.
+### Blocco 2 — Inclusioni (righe 23–27)
+```cpp
+// Inclusioni: usiamo le API Win32 e l'helper C per stampa diagnostica
+#include <windows.h>
+#include <tlhelp32.h>
+#include <cstdio>
+```
+- `windows.h`: include principale per le API Win32 (processi, thread, memoria, ecc.).
+- `tlhelp32.h`: API per fare snapshot dei processi (`CreateToolhelp32Snapshot`, `Process32FirstW`, `Process32NextW`).
+- `cstdio`: per funzioni di stampa (`printf`, `fprintf`).
 
-### Come funziona l’iniettore, passo per passo
-1) Trova il processo target (per default `wesnoth.exe`).
-   - Usa le API: `CreateToolhelp32Snapshot`, `Process32FirstW/Process32NextW` e confronta il nome in modo case-insensitive.
-2) Apre il processo con i diritti minimi indispensabili.
-   - `PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ`.
-3) Alloca memoria dentro il processo target.
-   - `VirtualAllocEx(..., PAGE_READWRITE)` per riservare lo spazio dove scrivere la stringa col percorso della DLL.
-4) Scrive il percorso assoluto della DLL in quella memoria.
-   - `WriteProcessMemory` copia la stringa dal tuo processo a quello del gioco.
-5) Risolve l’indirizzo di `LoadLibraryA`.
-   - `GetModuleHandleA("kernel32.dll")` + `GetProcAddress("LoadLibraryA")` nel tuo processo (l’indirizzo è valido anche nel target).
-6) Crea un thread remoto nel target che esegue `LoadLibraryA(percorsoDLL)`. 
-   - `CreateRemoteThread(process, ..., LoadLibraryA, indirizzoStringa, ...)`.
-7) Aspetta la fine del thread e legge il risultato.
-   - `GetExitCodeThread` restituisce un valore: se diverso da `0`, è l’`HMODULE` della DLL caricata (successo).
-8) Pulisce risorse.
-   - Libera la memoria remota (`VirtualFreeEx`) e chiude gli handle.
+### Blocco 3 — Percorso DLL di default (righe 29–31)
+```cpp
+// Il percorso completo della DLL da iniettare.
+//const char* dll_path = "...InternalMemoryHack.dll";
+const char* dll_path = "...Wesnoth_CodeCaveDLL.dll";
+```
+- `dll_path` è un fallback: se non passi la DLL da riga di comando, useremo questo percorso.
+- Consiglio pratico: passa sempre il percorso assoluto via CLI per evitare errori di cartella/piattaforma.
 
-Nel codice (`DLL_Injector/DLL_Injector/main.cpp`) sono inclusi:
-- Messaggi chiari in console per ogni fase (trovi prefisso `[Injector]`).
-- Un controllo che il file DLL esista prima di proseguire.
-- Una piccola attesa (fino a 30s) per consentire al processo target di avviarsi.
+### Blocco 4 — Helper errori (righe 33–43)
+```cpp
+static void stampaErrore(const char* dove) { /* GetLastError + FormatMessageA */ }
+```
+- Chiama `GetLastError()` e lo traduce in testo umano con `FormatMessageA`.
+- Ogni volta che un’API critica fallisce, chiamiamo questo helper per capire subito il motivo.
 
-### Perché usiamo le versioni “W” (wide) delle API di enumerazione processi
-- `Process32FirstW/NextW` e `PROCESSENTRY32W` lavorano con stringhe wide (Unicode). 
-- Questo evita problemi con nomi di processo contenenti caratteri non ASCII e rende il codice più robusto su sistemi non italiani.
+### Blocco 5 — Verifica file esistente (righe 45–49)
+```cpp
+static bool fileEsisteA(const char* percorso) { /* GetFileAttributesA */ }
+```
+- Controlla che il percorso della DLL punti a un file reale. Se non esiste, fermiamo l’esecuzione prima di tentare l’injection.
 
-### Perché non usiamo PROCESS_ALL_ACCESS
-- Concedere il minimo indispensabile riduce i fallimenti dovuti a UAC/permessi e rende il codice più “corretto”.
-- I diritti che usiamo bastano per: creare thread, leggere/scrivere memoria, cambiare protezioni.
+### Blocco 6 — Ingresso `main` e setup IO (righe 51–66)
+```cpp
+int main(int argc, char** argv) {
+  const char* percorsoDll = (argc > 1) ? argv[1] : dll_path;
+  const wchar_t* target = L"wesnoth.exe";
+  bool pausaFinale = true; // teniamo aperta la console
+  setvbuf(stdout, NULL, _IONBF, 0);
+  setvbuf(stderr, NULL, _IONBF, 0);
+  printf("[Injector] Target: "); wprintf(L"%s\n", target);
+  printf("[Injector] DLL: %s\n", percorsoDll);
+```
+- Recuperiamo la DLL da CLI, altrimenti usiamo il default.
+- Impostiamo `pausaFinale=true` per lasciare aperta la console e leggere l’output.
+- Disabilitiamo il buffering così i messaggi appaiono immediatamente.
 
-### ANSI vs Unicode: `LoadLibraryA` o `LoadLibraryW`
-- `LoadLibraryA` vuole una stringa ANSI (8-bit). Funziona finché il percorso contiene solo caratteri ASCII “semplici”.
-- Se il percorso della DLL contiene caratteri speciali, conviene usare `LoadLibraryW` e scrivere nel processo una stringa wide (UTF-16).
+### Blocco 7 — Validazione percorso DLL (righe 67–72)
+```cpp
+if (!fileEsisteA(percorsoDll)) { /* stampa errore e return 1 */ }
+```
+- Evita subito l’errore più comune: path errato o DLL non compilata dove pensi.
 
-### 32-bit vs 64-bit (architettura)
-- Un processo 32-bit non può iniettare in un 64-bit e viceversa con questa tecnica.
-- Devi sempre allineare: gioco, DLL e iniettore devono avere la stessa architettura.
-- Visual Studio: “Win32” = 32-bit, “x64” = 64-bit. Verifica anche la cartella di output (`Debug` vs `x64\\Debug`).
+### Blocco 8 — Attesa del processo target (righe 74–98)
+```cpp
+DWORD pid = 0; DWORD atteso = 0; const DWORD attesaMaxMs = 30000;
+while (!pid && atteso <= attesaMaxMs) {
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  PROCESSENTRY32W pe = {0}; pe.dwSize = sizeof(pe);
+  if (Process32FirstW(snap, &pe)) {
+    do { if (_wcsicmp(pe.szExeFile, target) == 0) { pid = pe.th32ProcessID; break; } } while (Process32NextW(snap, &pe));
+  }
+  CloseHandle(snap);
+  if (!pid) { Sleep(500); atteso += 500; }
+}
+```
+- Fa polling ogni 500 ms fino a 30 s per trovare il processo `wesnoth.exe`.
+- Variante “W” (Unicode) per robustezza con nomi non ASCII.
 
-### Requisiti e preparazione
-- Windows con Windows SDK (Visual Studio consigliato).
-- La tua DLL e l’iniettore DEVONO avere la stessa architettura del gioco:
-  - Gioco 32-bit → DLL 32-bit + iniettore 32-bit (Win32)
-  - Gioco 64-bit → DLL 64-bit + iniettore 64-bit (x64)
-- Spesso serve eseguire l’iniettore come Amministratore (se il gioco è elevato).
+### Blocco 9 — Apertura del processo (righe 102–109)
+```cpp
+HANDLE process = OpenProcess(
+  PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
+  PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
+  FALSE, pid);
+```
+- Diritti minimi per creare thread e leggere/scrivere memoria. Niente `PROCESS_ALL_ACCESS`.
+- Se fallisce: esegui come Amministratore o verifica che il processo sia davvero attivo.
 
-### Compilazione con Visual Studio
-1. Apri la soluzione e seleziona la piattaforma corretta (Win32 per 32-bit o x64 per 64-bit).
-2. Compila `DLL_Injector` in Debug o Release.
-3. Compila anche la tua DLL (es. `Wesnoth_CodeCaveDLL`) con la stessa piattaforma.
+### Blocco 10 — Allocazione memoria remota (righe 110–116)
+```cpp
+SIZE_T sz = strlen(percorsoDll) + 1;
+LPVOID remote = VirtualAllocEx(process, NULL, sz, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+printf("[Injector] Memoria remota allocata a: %p (size=%zu)\n", remote, (size_t)sz);
+```
+- Prenota memoria nel target per contenere il percorso della DLL (stringa ANSI con terminatore `\0`).
 
-Percorsi di output tipici:
-- Win32 (32-bit): `...\\ProgettoDLL\\Debug\\NomeDLL.dll`
-- x64 (64-bit): `...\\ProgettoDLL\\x64\\Debug\\NomeDLL.dll`
+### Blocco 11 — Scrittura del percorso nel target (righe 117–125)
+```cpp
+if (!WriteProcessMemory(process, remote, percorsoDll, sz, NULL)) { /* errore */ }
+printf("[Injector] Percorso DLL scritto in memoria remota.\n");
+```
+- Copia i byte della stringa nel processo target. Fallisce se i diritti sono insufficienti.
 
-Usa “Copia come percorso” sull’eseguibile della DLL in Esplora File per evitare errori di path.
+### Blocco 12 — Risoluzione di `LoadLibraryA` (righe 127–143)
+```cpp
+HMODULE k32 = GetModuleHandleA("kernel32.dll");
+FARPROC pLoadLibA = GetProcAddress(k32, "LoadLibraryA");
+printf("[Injector] Indirizzo LoadLibraryA: %p\n", pLoadLibA);
+```
+- Ottiene l’indirizzo della funzione di caricamento DLL.
+- L’indirizzo è valido anche per il target (stesso modulo di sistema mappato in tutti i processi).
 
-### Uso: il modo più semplice
-1) Avvia il gioco (ad es. `wesnoth.exe`).
-2) Apri un Prompt dei comandi nella cartella dell’iniettore (o usa il path assoluto).
-3) Esegui l’iniettore con il percorso assoluto della DLL tra virgolette:
+### Blocco 13 — Creazione del thread remoto (righe 145–155)
+```cpp
+HANDLE th = CreateRemoteThread(process, NULL, 0, (LPTHREAD_START_ROUTINE)pLoadLibA, remote, 0, NULL);
+printf("[Injector] Thread remoto creato: %p\n", th);
+```
+- Crea un thread nel processo target, che esegue `LoadLibraryA(remote)`.
+- `remote` è l’indirizzo dove abbiamo scritto la stringa con il percorso DLL.
 
+### Blocco 14 — Attesa e lettura risultato (righe 156–164)
+```cpp
+WaitForSingleObject(th, INFINITE);
+DWORD exitCode = 0; GetExitCodeThread(th, &exitCode);
+printf("Remote thread exit code (HMODULE) = 0x%08lX\n", (unsigned long)exitCode);
+```
+- L’exit code del thread è l’`HMODULE` restituito da `LoadLibraryA`: diverso da 0 = successo.
+- 0 significa fallimento: vedi la sezione Troubleshooting.
+
+### Blocco 15 — Pulizia risorse e pausa (righe 166–174)
+```cpp
+VirtualFreeEx(process, remote, 0, MEM_RELEASE);
+CloseHandle(th); CloseHandle(process);
+puts("Fatto."); puts("Premi Invio per uscire..."); getchar();
+```
+- Libera memoria remota e chiude gli handle. Mantiene aperta la console per leggere l’output.
+
+---
+
+## Uso pratico
+- Compila in Win32 se il gioco è 32‑bit, in x64 se è 64‑bit. La DLL deve avere la stessa architettura del gioco.
+- Avvia il gioco, poi esegui:
 ```bat
 DLL_Injector.exe "C:\\Users\\tuoUtente\\source\\repos\\Wesnoth_CodeCaveDLL\\Debug\\Wesnoth_CodeCaveDLL.dll"
 ```
+- Se non passi argomenti, verrà usato `dll_path` hard‑coded.
 
-Se non passi un argomento, l’iniettore usa il percorso hard-coded nel sorgente (`dll_path`). È consigliato passarlo da riga di comando.
+## Troubleshooting mirato
+- **Percorso DLL errato**: ricontrolla cartelle `Debug` vs `x64\\Debug`. Usa “Copia come percorso”.
+- **`HMODULE = 0`**: mancano dipendenze della DLL; percorso con caratteri non ASCII (usa `LoadLibraryW`); `DllMain` fallisce; AV/EDR blocca l’injection.
+- **Nessun effetto in gioco**: il problema è nella DLL (offset/codecave/patch). Aggiungi `MessageBoxA` in `DllMain` e usa `FlushInstructionCache` dopo le patch.
+- **Permessi**: se il target è elevato, esegui l’iniettore come Amministratore.
 
-### Cosa vedrai in console e come leggerlo
-Esempio di output (semplificato):
+## Estensioni consigliate
+- Parametri CLI per processo target e percorso DLL.
+- Variante con `LoadLibraryW` scrivendo una wide‑string nel target.
+- Log su file oltre alla console.
 
-```
-[Injector] Target: wesnoth.exe
-[Injector] DLL: C:\\...\\Wesnoth_CodeCaveDLL.dll
-[Injector] PID trovato: 1234
-[Injector] Memoria remota allocata a: 0x12345678 (size=...
-[Injector] Percorso DLL scritto in memoria remota.
-[Injector] Indirizzo LoadLibraryA: 0x...
-[Injector] Thread remoto creato: 0x...
-Remote thread exit code (HMODULE) = 0x5A0000
-Fatto.
-```
-
-- Se l’HMODULE è diverso da `0x00000000`, la DLL è stata caricata correttamente nel gioco.
-- Se è `0x00000000`, la DLL non è stata caricata (vedi Troubleshooting qui sotto).
-
-### Come funziona davvero `CreateRemoteThread` qui
-- Passiamo come funzione d’entrata l’indirizzo di `LoadLibraryA` nel modulo `kernel32.dll`.
-- Come parametro, passiamo l’indirizzo nel target dove abbiamo scritto la stringa col percorso assoluto della DLL.
-- Il thread remoto esegue `LoadLibraryA(parametro)`, il loader carica la DLL e ritorna l’`HMODULE`, che sarà il codice di uscita del thread.
-
-### Cosa può fallire in `LoadLibraryA`
-- Il file non esiste o il path non è accessibile dal processo target.
-- Dipendenze mancanti: la tua DLL importa altre DLL non presenti nel `PATH` del processo target.
-- Architettura non compatibile (DLL 64-bit in processo 32-bit o viceversa).
-- Blocchi di sicurezza (AV/EDR) che impediscono il caricamento/iniezione.
-- `DllMain` della tua DLL ritorna `FALSE` o fa crash (es. perché fa I/O complessi in `DLL_PROCESS_ATTACH`).
-
-### Regole d’oro per `DllMain`
-- Mantieni `DllMain` leggero: niente operazioni bloccanti, niente thread join, niente sincronizzazioni complicate.
-- Se devi fare lavoro “pesante”, crea un thread separato e fallo lì.
-- Per debug iniziale, un `MessageBoxA` in `DLL_PROCESS_ATTACH` è utilissimo per capire se la DLL si carica davvero.
-
-### Troubleshooting (problemi comuni)
-1) “Percorso DLL non valido o inesistente”
-   - Controlla di non confondere Win32 con x64 nei percorsi (`Debug` vs `x64\\Debug`).
-   - Usa “Copia come percorso” sulla DLL appena compilata.
-2) “Processo not found / non trovato entro il tempo limite”
-   - Il gioco non è avviato? Il nome del processo è diverso? Cambia `target` nel codice o passa un’opzione (vedi personalizzazioni).
-3) `HMODULE = 0x00000000`
-   - Dipendenze della DLL mancanti (la tua DLL importa altre DLL non presenti). Prova a copiare la DLL nella cartella del gioco.
-   - Path non ASCII con `LoadLibraryA` (usa solo ASCII oppure implementa variante `LoadLibraryW`).
-   - `DllMain` della tua DLL ritorna `FALSE` o va in crash: aggiungi log/MessageBox in `DLL_PROCESS_ATTACH` per verificare.
-   - Antivirus/EDR che blocca `CreateRemoteThread` o l’injection.
-4) “La DLL si carica ma in gioco non succede nulla”
-   - Quasi sempre offset/codecave non corrispondono alla tua versione del gioco. Devi ri-trovarli con un debugger/cheat engine.
-   - Assicurati che la tua DLL ripristini correttamente le istruzioni originali e usi `FlushInstructionCache` dopo le patch.
-
-### Personalizzazioni utili
-- Cambiare il nome del processo target (`const wchar_t* target = L"notepad.exe";`).
-- Aggiungere il supporto a `LoadLibraryW` scrivendo una stringa wide nel processo e risolvendo `LoadLibraryW`.
-- Aggiungere opzioni da riga di comando: `DLL_Injector.exe <percorsoDLL> [nomeProcesso]`.
-
-### Nota legale
-Questo codice è per studio e ricerca. Usalo responsabilmente e solo dove consentito. Gli autori non sono responsabili di eventuali abusi.
+## Nota legale
+Codice per scopi educativi. Usalo responsabilmente e solo dove consentito.
 
 
 
