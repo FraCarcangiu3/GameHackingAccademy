@@ -53,8 +53,16 @@ int main(int argc, char** argv) {
 	const char* percorsoDll = (argc > 1) ? argv[1] : dll_path;
 	// Usiamo stringhe wide per enumerare processi in modo robusto (evita problemi di locale)
 	const wchar_t* target = L"wesnoth.exe"; // modifica se vuoi un altro processo
-	// Se avviato con doppio click (nessun argomento), teniamo aperta la console a fine esecuzione
-	bool pausaFinale = (argc <= 1);
+	// Teniamo aperta la console a fine esecuzione per ispezionare sempre l'output
+	bool pausaFinale = true;
+
+	// Disabilita buffering per mostrare l'output immediatamente
+	setvbuf(stdout, NULL, _IONBF, 0);
+	setvbuf(stderr, NULL, _IONBF, 0);
+
+	printf("[Injector] Target: ");
+	wprintf(L"%s\n", target);
+	printf("[Injector] DLL: %s\n", percorsoDll);
 
 	// Controllo percorso DLL
 	if (!fileEsisteA(percorsoDll)) {
@@ -89,6 +97,8 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
+	printf("[Injector] PID trovato: %lu\n", (unsigned long)pid);
+
 	// Apriamo il processo con i privilegi minimi necessari (no PROCESS_ALL_ACCESS)
 	HANDLE process = OpenProcess(
 		PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
@@ -102,6 +112,8 @@ int main(int argc, char** argv) {
 	LPVOID remote = VirtualAllocEx(process, NULL, sz, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 	if (!remote) { stampaErrore("VirtualAllocEx"); CloseHandle(process); return 1; }
 
+	printf("[Injector] Memoria remota allocata a: %p (size=%zu)\n", remote, (size_t)sz);
+
 	// Scriviamo il percorso della DLL nella memoria remota
 	if (!WriteProcessMemory(process, remote, percorsoDll, sz, NULL)) {
 		stampaErrore("WriteProcessMemory");
@@ -109,6 +121,8 @@ int main(int argc, char** argv) {
 		CloseHandle(process);
 		return 1;
 	}
+
+	printf("[Injector] Percorso DLL scritto in memoria remota.\n");
 
 	// Risolviamo l'indirizzo di LoadLibraryA da kernel32 nel nostro processo
 	HMODULE k32 = GetModuleHandleA("kernel32.dll");
@@ -126,6 +140,8 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
+	printf("[Injector] Indirizzo LoadLibraryA: %p\n", pLoadLibA);
+
 	// Creiamo il thread remoto che eseguirà LoadLibraryA(percorso DLL) nel target
 	HANDLE th = CreateRemoteThread(process, NULL, 0, (LPTHREAD_START_ROUTINE)pLoadLibA, remote, 0, NULL);
 	if (!th) {
@@ -134,6 +150,8 @@ int main(int argc, char** argv) {
 		CloseHandle(process);
 		return 1;
 	}
+
+	printf("[Injector] Thread remoto creato: %p\n", th);
 
 	// Attendiamo che il thread finisca e leggiamo il codice di uscita (HMODULE della DLL se successo)
 	WaitForSingleObject(th, INFINITE);
