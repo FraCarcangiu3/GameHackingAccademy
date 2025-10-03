@@ -42,29 +42,52 @@ static void stampaErrore(const char* dove) {
 	if (msg) LocalFree(msg);
 }
 
+// Verifica veloce dell'esistenza del file DLL
+static bool fileEsisteA(const char* percorso) {
+	DWORD attr = GetFileAttributesA(percorso);
+	return (attr != INVALID_FILE_ATTRIBUTES) && !(attr & FILE_ATTRIBUTE_DIRECTORY);
+}
+
 int main(int argc, char** argv) {
 	// Permettiamo di passare il percorso DLL da riga di comando, altrimenti usiamo il default
 	const char* percorsoDll = (argc > 1) ? argv[1] : dll_path;
 	// Usiamo stringhe wide per enumerare processi in modo robusto (evita problemi di locale)
 	const wchar_t* target = L"wesnoth.exe"; // modifica se vuoi un altro processo
+	// Se avviato con doppio click (nessun argomento), teniamo aperta la console a fine esecuzione
+	bool pausaFinale = (argc <= 1);
 
-	// Creiamo uno snapshot dei processi correnti
-	HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	if (snap == INVALID_HANDLE_VALUE) { stampaErrore("CreateToolhelp32Snapshot"); return 1; }
+	// Controllo percorso DLL
+	if (!fileEsisteA(percorsoDll)) {
+		fprintf(stderr, "Percorso DLL non valido o inesistente: %s\n", percorsoDll);
+		if (pausaFinale) { puts("Premi Invio per uscire..."); getchar(); }
+		return 1;
+	}
 
-	// Usiamo la variante wide delle strutture/funzioni di enumerazione
-	PROCESSENTRY32W pe = { 0 };
-	pe.dwSize = sizeof(pe);
-	if (!Process32FirstW(snap, &pe)) { stampaErrore("Process32FirstW"); CloseHandle(snap); return 1; }
-
-	// Cerchiamo il PID del processo di destinazione (case-insensitive)
+	// Attesa del processo target fino a 30s (polling ogni 500ms)
 	DWORD pid = 0;
-	do {
-		if (_wcsicmp(pe.szExeFile, target) == 0) { pid = pe.th32ProcessID; break; }
-	} while (Process32NextW(snap, &pe));
-	CloseHandle(snap);
+	const DWORD attesaMaxMs = 30000;
+	DWORD atteso = 0;
+	while (!pid && atteso <= attesaMaxMs) {
+		HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+		if (snap == INVALID_HANDLE_VALUE) { stampaErrore("CreateToolhelp32Snapshot"); break; }
 
-	if (!pid) { fwprintf(stderr, L"Processo %s non trovato.\n", target); return 1; }
+		PROCESSENTRY32W pe = { 0 };
+		pe.dwSize = sizeof(pe);
+		if (!Process32FirstW(snap, &pe)) { stampaErrore("Process32FirstW"); CloseHandle(snap); break; }
+
+		do {
+			if (_wcsicmp(pe.szExeFile, target) == 0) { pid = pe.th32ProcessID; break; }
+		} while (Process32NextW(snap, &pe));
+		CloseHandle(snap);
+
+		if (!pid) { Sleep(500); atteso += 500; }
+	}
+
+	if (!pid) {
+		fwprintf(stderr, L"Processo %s non trovato entro il tempo limite.\n", target);
+		if (pausaFinale) { puts("Premi Invio per uscire..."); getchar(); }
+		return 1;
+	}
 
 	// Apriamo il processo con i privilegi minimi necessari (no PROCESS_ALL_ACCESS)
 	HANDLE process = OpenProcess(
@@ -128,5 +151,6 @@ int main(int argc, char** argv) {
 	CloseHandle(process);
 
 	puts("Fatto.");
+	if (pausaFinale) { puts("Premi Invio per uscire..."); getchar(); }
 	return 0;
 }
