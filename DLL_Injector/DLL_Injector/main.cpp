@@ -28,9 +28,11 @@ La spiegazione completa di come funziona questo codice � disponibile su https:
 
 // Il percorso completo della DLL da iniettare.
 //const char* dll_path = "C:\\Users\\francesco\\source\\repos\\..\\Debug\\.dll";
+// 
+//
 //const char* dll_path = "C:\\Users\\francesco\\source\\repos\\InternalMemoryHack\\Debug\\InternalMemoryHack.dll";
 //const char* dll_path = "C:\\Users\\francesco\\source\\repos\\Wesnoth_CodeCaveDLL\\Debug\\Wesnoth_CodeCaveDLL.dll";
-const char* dll_path = "C:\\Users\\francesco\\source\\repos\\Wesnoth_Stathack\\Debug\\Wesnoth_Stathack.dll";
+const char* dll_path = "C:\\Users\\francesco\\source\\repos\\Wesnoth_Maphack\\Debug\\Wesnoth_Maphack.dll";
 
 
 // Helper di errore: centralizza la stampa di GetLastError con messaggio leggibile

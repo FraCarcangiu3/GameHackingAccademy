@@ -1,0 +1,3 @@
+﻿  main.cpp
+MSVCRTD.lib(exe_main.obj) : error LNK2019: riferimento al simbolo esterno _main non risolto nella funzione "int __cdecl invoke_main(void)" (?invoke_main@@YAHXZ)
+C:\Users\francesco\source\repos\Wesnoth_Maphack\Debug\Wesnoth_Maphack.exe : fatal error LNK1120: 1 esterni non risolti
