@@ -32,7 +32,7 @@ La spiegazione completa di come funziona questo codice � disponibile su https:
 //
 //const char* dll_path = "C:\\Users\\francesco\\source\\repos\\InternalMemoryHack\\Debug\\InternalMemoryHack.dll";
 //const char* dll_path = "C:\\Users\\francesco\\source\\repos\\Wesnoth_CodeCaveDLL\\Debug\\Wesnoth_CodeCaveDLL.dll";
-const char* dll_path = "C:\\Users\\francesco\\source\\repos\\Wesnoth_Maphack\\Debug\\Wesnoth_Maphack.dll";
+const char* dll_path = "C:\\Users\\francesco\\source\\repos\\UrbanTerror_MemoryWallhack\\Debug\\UrbanTerror_MemoryWallhack.dll";
 
 
 // Helper di errore: centralizza la stampa di GetLastError con messaggio leggibile
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
 	// Permettiamo di passare il percorso DLL da riga di comando, altrimenti usiamo il default
 	const char* percorsoDll = (argc > 1) ? argv[1] : dll_path;
 	// Usiamo stringhe wide per enumerare processi in modo robusto (evita problemi di locale)
-	const wchar_t* target = L"wesnoth.exe"; // modifica se vuoi un altro processo
+	const wchar_t* target = L"Quake3-UrT.exe"; // modifica se vuoi un altro processo
 	// Teniamo aperta la console a fine esecuzione per ispezionare sempre l'output
 	bool pausaFinale = true;
 
