@@ -13,4 +13,8 @@
     <PackageReference Include="swed32" Version="1.1.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Hitsounds\" />
+  </ItemGroup>
+
 </Project>
