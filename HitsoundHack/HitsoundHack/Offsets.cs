@@ -16,3 +16,4 @@ namespace HitsoundHack
         // Offset aggiuntivi per HitsoundHack
         public static int shooting = 0xF0; // Is the entity shooting (relative to entity)
     }
+}
