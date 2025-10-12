@@ -1,4 +1,6 @@
-﻿using Swed32;
+﻿// By Francesco Carcangiu ////////////////////////////
+
+using Swed32;
 using EntityManager;
 using EntityManager.Entity_Handling;
 using EntityManager.Entity_Structures;
