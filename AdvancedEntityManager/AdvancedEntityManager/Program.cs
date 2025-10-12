@@ -8,9 +8,21 @@ Console.WriteLine(new string('=', 60));
 
 // 1. Connetti al gioco
 Swed swed = new Swed("ac_client");
-if (!swed.IsValid())
+try
+{
+    // Testa la connessione leggendo l'indirizzo base
+    IntPtr testBase = swed.GetModuleBase(".exe");
+    if (testBase == IntPtr.Zero)
+    {
+        Console.WriteLine("❌ Errore: Impossibile connettersi al gioco Assault Cube!");
+        Console.WriteLine("Assicurati che il gioco sia in esecuzione.");
+        return;
+    }
+}
+catch (Exception ex)
 {
     Console.WriteLine("❌ Errore: Impossibile connettersi al gioco Assault Cube!");
+    Console.WriteLine($"Dettagli: {ex.Message}");
     Console.WriteLine("Assicurati che il gioco sia in esecuzione.");
     return;
 }
