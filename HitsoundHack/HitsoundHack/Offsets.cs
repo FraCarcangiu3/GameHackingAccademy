@@ -8,7 +8,11 @@ namespace HitsoundHack
 {
     public class Offsets
     {
-        public static int entitylistAddress = ; // Address of the entity list
-        public static int forceAttack = ; // Address to force an attack
-        public static int healt = ; // Address of the health value
+        // Offset trovati da EntityManager per Assault Cube
+        public static int entitylistAddress = 0x0018AC04; // Address of the entity list
+        public static int localPlayer = 0x0017E0A8; // Local player address
+        public static int health = 0xEC; // Address of the health value (relative to entity)
+        
+        // Offset aggiuntivi per HitsoundHack
+        public static int shooting = 0xF0; // Is the entity shooting (relative to entity)
     }
