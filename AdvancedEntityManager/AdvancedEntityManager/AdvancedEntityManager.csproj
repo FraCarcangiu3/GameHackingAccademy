@@ -6,10 +6,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PlatformTarget>x86</PlatformTarget>
+    <AssemblyName>AdvancedEntityManager</AssemblyName>
+    <RootNamespace>AdvancedEntityManager</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="swed32" Version="1.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Entity Structures\Entity.cs" />
+    <Compile Include="Entity Handling\AdvancedEntityManager.cs" />
+    <Compile Include="Entity Handling\ACAdvancedEntityManager.cs" />
+    <Compile Include="Offset Scanner\DynamicOffsetScanner.cs" />
   </ItemGroup>
 
 </Project>
