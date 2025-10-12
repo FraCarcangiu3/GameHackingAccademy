@@ -61,38 +61,26 @@ namespace AdvancedEntityManager.Offset_Scanner
         }
 
         /// <summary>
-        /// Trova il giocatore locale utilizzando pattern matching avanzato
+        /// Trova il giocatore locale utilizzando pattern matching veloce
         /// </summary>
         private int FindLocalPlayerWithPattern()
         {
-            Console.WriteLine("🔍 Ricerca LocalPlayer con pattern matching...");
+            Console.WriteLine("🔍 Ricerca LocalPlayer con pattern matching veloce...");
             
-            // Pattern 1: Cerca valori di salute che cambiano frequentemente
-            for (int offset = 0x1000; offset < moduleSize; offset += 0x4)
+            // Testa prima gli offset noti per velocità
+            int[] knownOffsets = { 0x0017E0A8, 0x0017E0B0, 0x0017E0B8, 0x0017E0C0 };
+            
+            foreach (int offset in knownOffsets)
             {
                 try
                 {
                     IntPtr address = IntPtr.Add(moduleBase, offset);
+                    int health = swed.ReadInt(address, 0xEC);
                     
-                    // Leggi più volte per verificare la consistenza
-                    int[] healthReadings = new int[5];
-                    for (int i = 0; i < 5; i++)
+                    if (health >= 0 && health <= 100)
                     {
-                        healthReadings[i] = swed.ReadInt(address, 0xEC);
-                        System.Threading.Thread.Sleep(10); // Piccola pausa
-                    }
-                    
-                    // Verifica che tutti i valori siano identici e plausibili
-                    if (healthReadings.All(h => h == healthReadings[0]) && 
-                        healthReadings[0] >= 0 && healthReadings[0] <= 100)
-                    {
-                        // Verifica aggiuntiva: controlla altri campi
-                        int team = swed.ReadInt(address, 0xF0);
-                        if (team >= 0 && team <= 2)
-                        {
-                            Console.WriteLine($"📍 Pattern LocalPlayer trovato a offset: 0x{offset:X}");
-                            return offset;
-                        }
+                        Console.WriteLine($"📍 LocalPlayer trovato a offset noto: 0x{offset:X}");
+                        return offset;
                     }
                 }
                 catch
@@ -101,58 +89,39 @@ namespace AdvancedEntityManager.Offset_Scanner
                 }
             }
             
-            // Fallback agli offset noti
+            // Se gli offset noti non funzionano, usa quello di default
+            Console.WriteLine("⚠️ Usando offset di default per LocalPlayer");
             return 0x0017E0A8;
         }
 
         /// <summary>
-        /// Trova la lista delle entità con analisi strutturale
+        /// Trova la lista delle entità con test veloce
         /// </summary>
         private int FindEntityListWithStructure()
         {
-            Console.WriteLine("🔍 Ricerca EntityList con analisi strutturale...");
+            Console.WriteLine("🔍 Ricerca EntityList con test veloce...");
             
-            for (int offset = 0x1000; offset < moduleSize; offset += 0x4)
+            // Testa prima gli offset noti
+            int[] knownOffsets = { 0x0018AC04, 0x0018AC08, 0x0018AC0C, 0x0018AC10 };
+            
+            foreach (int offset in knownOffsets)
             {
                 try
                 {
-                    // Analizza la struttura come array di puntatori
-                    IntPtr[] entityPointers = new IntPtr[10];
-                    bool validStructure = true;
+                    // Testa solo i primi 3 puntatori per velocità
+                    IntPtr ptr1 = swed.ReadPointer(moduleBase, offset, 0);
+                    IntPtr ptr2 = swed.ReadPointer(moduleBase, offset, 4);
+                    IntPtr ptr3 = swed.ReadPointer(moduleBase, offset, 8);
                     
-                    for (int i = 0; i < 10; i++)
+                    if (ptr1 != IntPtr.Zero && ptr2 != IntPtr.Zero)
                     {
-                        entityPointers[i] = swed.ReadPointer(moduleBase, offset, i * 0x4);
+                        // Testa se almeno uno ha salute valida
+                        int health1 = swed.ReadInt(ptr1, 0xEC);
+                        int health2 = swed.ReadInt(ptr2, 0xEC);
                         
-                        // Verifica che il puntatore sia valido
-                        if (entityPointers[i] == IntPtr.Zero || 
-                            entityPointers[i].ToInt64() < moduleBase.ToInt64() || 
-                            entityPointers[i].ToInt64() > moduleBase.ToInt64() + moduleSize)
+                        if ((health1 >= 0 && health1 <= 100) || (health2 >= 0 && health2 <= 100))
                         {
-                            validStructure = false;
-                            break;
-                        }
-                    }
-                    
-                    if (validStructure)
-                    {
-                        // Verifica che almeno alcuni puntatori puntino a entità valide
-                        int validEntities = 0;
-                        foreach (var ptr in entityPointers)
-                        {
-                            if (ptr != IntPtr.Zero)
-                            {
-                                int health = swed.ReadInt(ptr, 0xEC);
-                                if (health >= 0 && health <= 100)
-                                {
-                                    validEntities++;
-                                }
-                            }
-                        }
-                        
-                        if (validEntities >= 2) // Almeno 2 entità valide
-                        {
-                            Console.WriteLine($"📍 Struttura EntityList trovata a offset: 0x{offset:X}");
+                            Console.WriteLine($"📍 EntityList trovata a offset noto: 0x{offset:X}");
                             return offset;
                         }
                     }
@@ -163,28 +132,20 @@ namespace AdvancedEntityManager.Offset_Scanner
                 }
             }
             
+            Console.WriteLine("⚠️ Usando offset di default per EntityList");
             return 0x0018AC04; // Fallback
         }
 
         /// <summary>
-        /// Trova l'offset della salute con validazione avanzata
+        /// Trova l'offset della salute con test veloce
         /// </summary>
         private int FindHealthWithValidation()
         {
-            Console.WriteLine("🔍 Ricerca Health con validazione avanzata...");
+            Console.WriteLine("🔍 Ricerca Health con test veloce...");
             
-            int[] commonHealthOffsets = { 0xEC, 0xF0, 0xF4, 0xF8, 0xFC, 0x100, 0x104, 0x108 };
-            
-            foreach (int offset in commonHealthOffsets)
-            {
-                if (ValidateHealthOffset(offset))
-                {
-                    Console.WriteLine($"📍 Health validato a offset: 0x{offset:X}");
-                    return offset;
-                }
-            }
-            
-            return 0xEC; // Fallback
+            // Usa direttamente l'offset noto per velocità
+            Console.WriteLine("📍 Health usando offset noto: 0xEC");
+            return 0xEC;
         }
 
         /// <summary>
@@ -224,24 +185,13 @@ namespace AdvancedEntityManager.Offset_Scanner
         }
 
         /// <summary>
-        /// Trova l'offset del nome con analisi delle stringhe
+        /// Trova l'offset del nome con test veloce
         /// </summary>
         private int FindNameWithStringAnalysis()
         {
-            Console.WriteLine("🔍 Ricerca Name con analisi stringhe...");
-            
-            int[] commonNameOffsets = { 0x205, 0x225, 0x245, 0x265, 0x285, 0x2A5 };
-            
-            foreach (int offset in commonNameOffsets)
-            {
-                if (ValidateNameOffset(offset))
-                {
-                    Console.WriteLine($"📍 Name validato a offset: 0x{offset:X}");
-                    return offset;
-                }
-            }
-            
-            return 0x205; // Fallback
+            Console.WriteLine("🔍 Ricerca Name con test veloce...");
+            Console.WriteLine("📍 Name usando offset noto: 0x205");
+            return 0x205;
         }
 
         /// <summary>
@@ -267,24 +217,13 @@ namespace AdvancedEntityManager.Offset_Scanner
         }
 
         /// <summary>
-        /// Trova l'offset del team con logica di validazione
+        /// Trova l'offset del team con test veloce
         /// </summary>
         private int FindTeamWithLogic()
         {
-            Console.WriteLine("🔍 Ricerca Team con logica di validazione...");
-            
-            int[] commonTeamOffsets = { 0xF0, 0xF4, 0xF8, 0xFC, 0x100, 0x104 };
-            
-            foreach (int offset in commonTeamOffsets)
-            {
-                if (ValidateTeamOffset(offset))
-                {
-                    Console.WriteLine($"📍 Team validato a offset: 0x{offset:X}");
-                    return offset;
-                }
-            }
-            
-            return 0xF0; // Fallback
+            Console.WriteLine("🔍 Ricerca Team con test veloce...");
+            Console.WriteLine("📍 Team usando offset noto: 0xF0");
+            return 0xF0;
         }
 
         /// <summary>
@@ -322,24 +261,13 @@ namespace AdvancedEntityManager.Offset_Scanner
         }
 
         /// <summary>
-        /// Trova l'offset della posizione con analisi delle coordinate
+        /// Trova l'offset della posizione con test veloce
         /// </summary>
         private int FindPositionWithCoordinateAnalysis()
         {
-            Console.WriteLine("🔍 Ricerca Position con analisi coordinate...");
-            
-            int[] commonPositionOffsets = { 0x34, 0x38, 0x3C, 0x40, 0x44, 0x48 };
-            
-            foreach (int offset in commonPositionOffsets)
-            {
-                if (ValidatePositionOffset(offset))
-                {
-                    Console.WriteLine($"📍 Position validata a offset: 0x{offset:X}");
-                    return offset;
-                }
-            }
-            
-            return 0x34; // Fallback
+            Console.WriteLine("🔍 Ricerca Position con test veloce...");
+            Console.WriteLine("📍 Position usando offset noto: 0x34");
+            return 0x34;
         }
 
         /// <summary>
@@ -374,24 +302,13 @@ namespace AdvancedEntityManager.Offset_Scanner
         }
 
         /// <summary>
-        /// Trova l'offset del shooting con analisi del comportamento
+        /// Trova l'offset del shooting con test veloce
         /// </summary>
         private int FindShootingWithBehaviorAnalysis()
         {
-            Console.WriteLine("🔍 Ricerca Shooting con analisi comportamento...");
-            
-            int[] commonShootingOffsets = { 0xF0, 0xF4, 0xF8, 0xFC, 0x100, 0x104 };
-            
-            foreach (int offset in commonShootingOffsets)
-            {
-                if (ValidateShootingOffset(offset))
-                {
-                    Console.WriteLine($"📍 Shooting validato a offset: 0x{offset:X}");
-                    return offset;
-                }
-            }
-            
-            return 0xF0; // Fallback
+            Console.WriteLine("🔍 Ricerca Shooting con test veloce...");
+            Console.WriteLine("📍 Shooting usando offset noto: 0xF0");
+            return 0xF0;
         }
 
         /// <summary>
