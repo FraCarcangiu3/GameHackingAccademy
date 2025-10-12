@@ -8,11 +8,11 @@
     <PlatformTarget>x86</PlatformTarget>
     <AssemblyName>AdvancedEntityManager</AssemblyName>
     <RootNamespace>AdvancedEntityManager</RootNamespace>
-    <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="swed32" Version="1.1.0" />
+    <PackageReference Include="System.Numerics" Version="4.3.0" />
   </ItemGroup>
 
 
