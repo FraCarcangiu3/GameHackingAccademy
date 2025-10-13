@@ -14,6 +14,6 @@ namespace HitsoundHack
         public static int health = 0xEC; // Address of the health value (relative to entity)
         
         // Offset aggiuntivi per HitsoundHack
-        public static int shooting = 0xF0; // Is the entity shooting (relative to entity)
+        public static int forceAttack = 0xF0; // Is the entity shooting (relative to entity)
     }
 }

@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("HitsoundHack")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+87dd89ad975c19844c80cb0e3bc9123d83e42972")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f3e9bd7b326e71b64fc684691b05767268b6c593")]
 [assembly: System.Reflection.AssemblyProductAttribute("HitsoundHack")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HitsoundHack")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
