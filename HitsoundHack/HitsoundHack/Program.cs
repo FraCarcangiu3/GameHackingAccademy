@@ -5,45 +5,32 @@ using System.Diagnostics;
 
 try
 {
-    // Verifica se il processo esiste prima di creare Swed
-    Process[] processes = Process.GetProcessesByName("hl");
+    // Verifica se il processo Assault Cube esiste
+    Process[] processes = Process.GetProcessesByName("ac_client");
     if (processes.Length == 0)
     {
-        Console.WriteLine("Errore: Il processo 'hl' (Half-Life) non è in esecuzione!");
-        Console.WriteLine("Assicurati che Half-Life sia avviato prima di eseguire questo hack.");
+        Console.WriteLine("Errore: Il processo 'ac_client' (Assault Cube) non è in esecuzione!");
+        Console.WriteLine("Assicurati che Assault Cube sia avviato prima di eseguire questo hack.");
         Console.WriteLine("Premi un tasto per uscire...");
         Console.ReadKey();
         return;
     }
 
-    Console.WriteLine($"Processo Half-Life trovato! PID: {processes[0].Id}");
-    Swed swed = new Swed("hl");
+    Console.WriteLine($"Processo Assault Cube trovato! PID: {processes[0].Id}");
+    Swed swed = new Swed("ac_client"); // Assault Cube process
 
-    // Verifica che i moduli necessari siano caricati
-    IntPtr hwwModule = swed.GetModuleBase("hw.dll"); // Get the base address of hw.dll
-    IntPtr client = swed.GetModuleBase("client.dll"); // Get the base address of client.dll
+    IntPtr moduleBase = swed.GetModuleBase(".exe"); // Get the base address of ac_client.exe
     
-    if (hwwModule == IntPtr.Zero)
+    if (moduleBase == IntPtr.Zero)
     {
-        Console.WriteLine("Errore: Modulo hw.dll non trovato!");
-        Console.WriteLine("Assicurati che Half-Life sia completamente caricato.");
+        Console.WriteLine("Errore: Modulo principale di Assault Cube non trovato!");
+        Console.WriteLine("Assicurati che Assault Cube sia completamente caricato.");
         Console.WriteLine("Premi un tasto per uscire...");
         Console.ReadKey();
         return;
     }
     
-    if (client == IntPtr.Zero)
-    {
-        Console.WriteLine("Errore: Modulo client.dll non trovato!");
-        Console.WriteLine("Assicurati che Half-Life sia completamente caricato.");
-        Console.WriteLine("Premi un tasto per uscire...");
-        Console.ReadKey();
-        return;
-    }
-    
-    Console.WriteLine("Moduli caricati con successo!");
-    Console.WriteLine($"hw.dll base: 0x{hwwModule.ToInt64():X}");
-    Console.WriteLine($"client.dll base: 0x{client.ToInt64():X}");
+    Console.WriteLine($"Modulo principale caricato: 0x{moduleBase.ToInt64():X}");
 
 List<Entity> entities = new List<Entity>(); // List to hold entities
 Entity localPlayer = new Entity(); // Local player entity
@@ -53,13 +40,14 @@ PlaySound();
 //main loop
 while (true)
 {
-    IntPtr entityList = swed.ReadPointer(hwwModule, Offsets.entitylistAddress); // Read the entity list pointer
-    localPlayer.Address = swed.ReadPointer(entityList, Offsets.localPlayer); // Read the local player address
+    // Per Assault Cube, leggiamo il local player direttamente dal modulo base
+    localPlayer.Address = swed.ReadPointer(moduleBase, Offsets.localPlayer); // Read the local player address
     localPlayer.Shooting = swed.ReadInt(localPlayer.Address, Offsets.forceAttack); // Read the local player's shooting status
 
-    for (int i = 1; i < 32; i++)
+    for (int i = 0; i < 10; i++) // Assault Cube ha max 10 entità
     {
-        IntPtr currentEnt = swed.ReadPointer(entityList, Offsets.localPlayer + i * 0x4); // Read the current entity address
+        // Per Assault Cube, leggiamo le entità direttamente dal modulo base
+        IntPtr currentEnt = swed.ReadPointer(moduleBase, Offsets.entityList, i * 0x4); // Read the current entity address
         if (currentEnt == IntPtr.Zero) continue; // Skip if the entity address is null
 
         int health = swed.ReadInt(currentEnt, Offsets.health); // Read the entity's health
@@ -98,32 +86,18 @@ catch (Exception ex)
 
 void PlaySound()
 {
-    try
-    {
-        string audioPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Hitsounds", "classic_hurt.mp3");
-        
-        if (!File.Exists(audioPath))
-        {
-            Console.WriteLine($"File audio non trovato: {audioPath}");
-            return;
-        }
+    string directory = AppDomain.CurrentDomain.BaseDirectory; // Get the base directory of the application
 
-        using (var audioFile = new AudioFileReader(audioPath))
-        using (var outputDevice = new WaveOutEvent())
-        {
-            outputDevice.Init(audioFile);
-            outputDevice.Volume = 0.5f;
-            outputDevice.Play();
-            
-            while (outputDevice.PlaybackState == PlaybackState.Playing)
-            {
-                Thread.Sleep(1);
-            }
-        }
-    }
-    catch (Exception ex)
+    using (var audioFile = new AudioFileReader(@"../../../Hitsounds/classic_hurt.mp3")) // Load the hitsound.wav file
+        using (var outputDevice = new WaveOutEvent()) // Create a new output device
     {
-        Console.WriteLine($"Errore durante la riproduzione del suono: {ex.Message}");
+        outputDevice.Init(audioFile); // Initialize the output device with the audio file
+        outputDevice.Volume = 0.5f; // Set volume to 50%
+        outputDevice.Play(); // Play the sound
+        while (outputDevice.PlaybackState == PlaybackState.Playing) // Wait for the sound to finish playing
+        {
+            Thread.Sleep(1); // Sleep for a short duration to avoid busy-waiting
+        }
     }
 }
 
